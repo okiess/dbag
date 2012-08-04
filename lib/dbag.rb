@@ -1,0 +1,7 @@
+require 'rubygems'
+gem 'httparty'
+require 'httparty'
+require 'json'
+require 'yaml'
+require 'logger'
+require File.dirname(__FILE__) + '/dbag/client'

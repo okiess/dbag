@@ -17,11 +17,12 @@ Jeweler::Tasks.new do |gem|
   gem.name = "dbag"
   gem.homepage = "http://github.com/okiess/dbag"
   gem.license = "MIT"
-  gem.summary = %Q{TODO: one-line summary of your gem}
-  gem.description = %Q{TODO: longer description of your gem}
+  gem.summary = "Client for a Data Bag server"
+  gem.description = "Client library to fetch and manage data bags from a server. Databags can be used for settings, configurations and arbitrary json data."
   gem.email = "kiessler@inceedo.com"
   gem.authors = ["Oliver Kiessler"]
-  # dependencies defined in Gemfile
+  gem.add_dependency "httparty", ">= 0.8.3"
+  gem.add_dependency "multi_json", ">= 1.3.6"
 end
 Jeweler::RubygemsDotOrgTasks.new
 
