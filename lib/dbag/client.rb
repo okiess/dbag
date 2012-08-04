@@ -23,30 +23,39 @@ module Dbag
     end
 
     def create(key, data_bag = {}, encrypted = false)
-      raise = "Invalid Databag!" unless key or data_bag
+      raise "Invalid Databag!" unless key or data_bag
       response = get_response(:post, '/data_bags.json', 
         {:body => {:data_bag => {:key => key, :bag_string_clear => data_bag.to_json, 
          :encrypted => encrypted}}})
     end
 
-    def to_file(hash, path, format = :json)
-      if format == :json
-        File.open(path, "w") do |f|
+    def update(key, data_bag = {}, encrypted = false)
+      raise "Invalid Databag!" unless key or data_bag
+      response = get_response(:put, "/data_bags/#{key}.json", 
+        {:body => {:data_bag => {:bag_string_clear => data_bag.to_json, 
+         :encrypted => encrypted}}})
+    end
+
+    def to_file(hash, path, format = :json)      
+      File.open(path, "w") do |f|
+        if format == :json
           f.write(JSON.pretty_generate(hash))
+        elsif format == :yaml
+          f.write(hash.to_yaml)
         end
-      elsif format == :yaml
-        # TODO
       end
     end
 
-    def from_file(new_key, path, format = :json, encrypted = false)
+    def from_file(new_key, path, encrypted = false, format = :json)
       File.open(path, "r" ) do |f|
         if format == :json
           if (json = JSON.load(f))
             create(new_key, json, encrypted)
           end
         elsif format == :yaml
-          # TODO
+          if (yaml = YAML.load_file(path))
+            create(new_key, yaml, encrypted)
+          end
         end
       end
     end
