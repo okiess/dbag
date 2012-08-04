@@ -18,7 +18,7 @@ Jeweler::Tasks.new do |gem|
   gem.homepage = "http://github.com/okiess/dbag"
   gem.license = "MIT"
   gem.summary = "Client for a Data Bag server"
-  gem.description = "Client library to fetch and manage data bags from a server. Databags can be used for settings, configurations and arbitrary json data."
+  gem.description = "Client library to fetch and manage data bags from a server. Databags can be used for settings, app configurations and arbitrary json data."
   gem.email = "kiessler@inceedo.com"
   gem.authors = ["Oliver Kiessler"]
   gem.add_dependency "httparty", ">= 0.8.3"
