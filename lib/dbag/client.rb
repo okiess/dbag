@@ -18,7 +18,7 @@ module Dbag
 
     def find(key)
       if (response = get_response(:get, "/data_bags/#{key}.json")).response.is_a?(Net::HTTPOK)
-        response.parsed_response["bag_string"]
+        JSON.parse(response.parsed_response["bag_string"])
       end
     end
 
@@ -29,12 +29,26 @@ module Dbag
          :encrypted => encrypted}}})
     end
 
-    def to_file(format = :json)
-      # TODO
+    def to_file(hash, path, format = :json)
+      if format == :json
+        File.open(path, "w") do |f|
+          f.write(JSON.pretty_generate(hash))
+        end
+      elsif format == :yaml
+        # TODO
+      end
     end
 
-    def from_file(new_key, path)
-      # TODO
+    def from_file(new_key, path, format = :json, encrypted = false)
+      File.open(path, "r" ) do |f|
+        if format == :json
+          if (json = JSON.load(f))
+            create(new_key, json, encrypted)
+          end
+        elsif format == :yaml
+          # TODO
+        end
+      end
     end
 
     private
