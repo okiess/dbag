@@ -16,24 +16,24 @@ module Dbag
       end
     end
 
-    def find(key)
-      if (response = get_response(:get, "/data_bags/#{key}.json")).response.is_a?(Net::HTTPOK)
-        JSON.parse(response.parsed_response["bag_string"])
+    def find(key, environment = 'production')
+      if (response = get_response(:get, "/data_bags/#{key}.json", {:environment => environment})).response.is_a?(Net::HTTPOK)
+        JSON.parse(response.parsed_response["bag_string"]) if response.parsed_response
       end
     end
 
-    def create(key, data_bag = {}, encrypted = false)
+    def create(key, environment, data_bag = {}, encrypted = false)
       raise "Invalid Databag!" unless key or data_bag
       response = get_response(:post, '/data_bags.json', 
         {:body => {:data_bag => {:key => key, :bag_string_clear => data_bag.to_json, 
-         :encrypted => encrypted}}})
+         :encrypted => encrypted, :environment => (environment || 'production')}}})
     end
 
-    def update(key, data_bag = {}, encrypted = false)
+    def update(key, environment, data_bag = {}, encrypted = false)
       raise "Invalid Databag!" unless key or data_bag
       response = get_response(:put, "/data_bags/#{key}.json", 
         {:body => {:data_bag => {:bag_string_clear => data_bag.to_json, 
-         :encrypted => encrypted}}})
+         :encrypted => encrypted}, :environment => (environment || 'production')}})
     end
 
     def to_file(hash, path, format = :json)      
@@ -46,15 +46,15 @@ module Dbag
       end
     end
 
-    def from_file(new_key, path, encrypted = false, format = :json)
+    def from_file(new_key, environment, path, encrypted = false, format = :json)
       File.open(path, "r" ) do |f|
         if format == :json
           if (json = JSON.load(f))
-            create(new_key, json, encrypted)
+            create(new_key, environment, json, encrypted)
           end
         elsif format == :yaml
           if (yaml = YAML.load_file(path))
-            create(new_key, yaml, encrypted)
+            create(new_key, environment, yaml, encrypted)
           end
         end
       end
@@ -70,6 +70,9 @@ module Dbag
           logger.debug("Body: #{body.inspect}")
           response = HTTParty.send(http_verb, endpoint_value, body)
         else
+          if options and options.any? and options[:environment]
+            endpoint_value = "#{endpoint_value}&environment=#{options[:environment]}"
+          end
           response = HTTParty.send(http_verb, endpoint_value) 
         end
         logger.debug("Response: #{response.inspect}") if response
