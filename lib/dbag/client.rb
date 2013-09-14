@@ -1,42 +1,66 @@
 module Dbag
   class Client
     include HTTParty
-    attr_accessor :base_url, :auth_token, :logger, :log_level
+    attr_accessor :base_url, :auth_token, :auth_token_valid_until, :logger, :log_level
 
-    def initialize(base_url, auth_token)
+    def initialize(base_url)
       self.base_url = base_url
-      self.auth_token = auth_token
       self.logger = Logger.new(STDOUT)
       self.logger.level = (self.log_level || Logger::DEBUG)
     end
 
-    def all
-      if (response = get_response(:get, '/data_bags.json')).response.is_a?(Net::HTTPOK)
-        response.parsed_response
+    def all(decrypt = true)
+      response = get_response(:get, '/data_bags.json')
+      if response and response.parsed_response and response.code == 200
+        if decrypt
+          decrypted = []
+          response.parsed_response.each do |item|
+            item['json'] = JSON.parse(decrypt(item['json']))
+            decrypted << item
+          end
+          return decrypted
+        else
+          return response.parsed_response
+        end
+      end
+      nil
+    end
+    
+    def dump(path = '/tmp', encrypted = true)
+      if (data_bags = all(false))
+        data_bags.each do |data_bag|
+          File.open("#{path}/#{data_bag['id']}#{encrypted ? '' : '.json'}", "w") do |f|
+            f.write(encrypted ? data_bag['json'] : JSON.pretty_generate(JSON.parse(decrypt(data_bag['json']))))
+          end
+        end
       end
     end
 
-    def find(key, environment = 'production')
-      if (response = get_response(:get, "/data_bags/#{key}.json", {:environment => environment})).response.is_a?(Net::HTTPOK)
-        JSON.parse(response.parsed_response["bag_string"]) if response.parsed_response
+    def find(data_bag_id)
+      if (response = get_response(:get, "/data_bags/#{data_bag_id}.json"))
+        if (data_bag = response.parsed_response)
+          data_bag['json'] = JSON.parse(decrypt(data_bag['json']))
+          return data_bag
+        end
       end
+      nil
     end
 
-    def create(key, environment, data_bag = {}, encrypted = false)
-      raise "Invalid Databag!" unless key or data_bag
+    def create(keys, data_bag = {})
+      raise "Invalid Databag!" unless keys or data_bag
       response = get_response(:post, '/data_bags.json', 
-        {:body => {:data_bag => {:key => key, :bag_string_clear => data_bag.to_json, 
-         :encrypted => encrypted, :environment => (environment || 'production')}}})
+        {:body => {:data_bag => {:keys => keys, :json => encrypt(data_bag.to_json)}}})
     end
 
-    def update(key, environment, data_bag = {}, encrypted = false)
-      raise "Invalid Databag!" unless key or data_bag
-      response = get_response(:put, "/data_bags/#{key}.json", 
-        {:body => {:data_bag => {:bag_string_clear => data_bag.to_json, 
-         :encrypted => encrypted}, :environment => (environment || 'production')}})
+    def update(data_bag)
+      raise "Invalid Databag!" unless data_bag
+      data_bag['json'] = encrypt(data_bag['json'].to_json)
+      data_bag.delete('url')
+      response = get_response(:put, "/data_bags/#{data_bag['id']}.json", {:body => {:data_bag => data_bag}})
     end
 
-    def to_file(hash, path, format = :json)      
+    def to_file(hash, path, format = :json)
+      # TODO
       File.open(path, "w") do |f|
         if format == :json
           f.write(JSON.pretty_generate(hash))
@@ -47,6 +71,7 @@ module Dbag
     end
 
     def from_file(new_key, environment, path, encrypted = false, format = :json)
+      # TODO
       File.open(path, "r" ) do |f|
         if format == :json
           if (json = JSON.load(f))
@@ -60,8 +85,47 @@ module Dbag
       end
     end
 
+    def self.setup
+      raise ".dbag file exists!" if File.exists?("#{ENV['HOME']}/.dbag")
+      File.open("#{ENV['HOME']}/.dbag", "w") do |f|
+        hash = {
+          :salt => "#{Time.now.to_i}#{SecureRandom.hex(128)}",
+          :secret_key => SecureRandom.hex(256),
+          :iv => OpenSSL::Cipher::Cipher.new('aes-256-cbc').random_iv
+        }
+        f.write(JSON.pretty_generate(hash))
+      end
+    end
+
     private
+    def encrypt(data_bag_json_string)
+      init_encryptor
+      data_bag_json_string.encrypt
+    end
+    
+    def decrypt(data_bag_json_string)
+      init_encryptor
+      data_bag_json_string.decrypt
+    end
+    
+    def init_encryptor
+      unless @secret_key
+        raise "dbag file doesn't exist!" unless File.exists?("#{ENV['HOME']}/.dbag")
+        File.open("#{ENV['HOME']}/.dbag", "r") do |f|
+          if (json = JSON.load(f))
+            @salt = json['salt']
+            @secret_key = json['secret_key']
+            @iv = json['iv']
+          end
+        end
+      end
+      Encryptor.default_options.merge!(:key => @secret_key, :iv => @iv, :salt => @salt)
+    end
+  
     def get_response(http_verb, endpoint, options = {})
+      response = nil
+      get_auth_token if self.auth_token.nil? or (not self.auth_token_valid_until.nil? and self.auth_token_valid_until < DateTime.now)
+      return nil unless self.auth_token
       begin
         endpoint_value = "#{self.base_url}#{URI.escape(endpoint)}?auth_token=#{self.auth_token}"
         logger.debug("Using endpoint: #{endpoint_value}")
@@ -70,15 +134,37 @@ module Dbag
           logger.debug("Body: #{body.inspect}")
           response = HTTParty.send(http_verb, endpoint_value, body)
         else
-          if options and options.any? and options[:environment]
-            endpoint_value = "#{endpoint_value}&environment=#{options[:environment]}"
-          end
           response = HTTParty.send(http_verb, endpoint_value) 
         end
-        logger.debug("Response: #{response.inspect}") if response
-        response
+        if response
+          logger.debug("Response: #{response.inspect}")
+          if response.code == 401
+            self.auth_token = nil
+            self.auth_token_valid_until = nil
+            return get_response(http_verb, endpoint, options) # retry
+          end
+        end
       rescue => e
         logger.error("Could not connect to backend: #{e.message}")
+      end
+      response
+    end
+    
+    def get_auth_token
+      auth = {:username => "kiessler@inceedo.com", :password => "tester"}
+      endpoint_value = "#{self.base_url}/auth_tokens.json"
+      body = {}
+      options = { :body => {}, :basic_auth => auth }
+      if (response = HTTParty.post(endpoint_value, options))
+        if response.code == 401
+          raise "Auth failed, auth token couldn't be created!"
+        end
+        if response.parsed_response and response.parsed_response['authentication_token']
+          self.auth_token = response.parsed_response['authentication_token']
+        end
+        if response.parsed_response and response.parsed_response['authentication_token_valid_until']
+          self.auth_token_valid_until = DateTime.parse(response.parsed_response['authentication_token_valid_until'].to_s)
+        end
       end
     end
   end

@@ -23,6 +23,7 @@ Jeweler::Tasks.new do |gem|
   gem.authors = ["Oliver Kiessler"]
   gem.add_dependency "httparty", ">= 0.8.3"
   gem.add_dependency "multi_json", ">= 1.3.6"
+  gem.add_dependency "encryptor", "1.1.3"
 end
 Jeweler::RubygemsDotOrgTasks.new
 

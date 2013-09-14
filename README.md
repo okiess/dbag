@@ -1,6 +1,6 @@
 # dbag
 
-Client library to fetch and manage data bags from a server. Databags can be used for settings, app configurations and arbitrary json data.
+Client library to fetch and manage data bags from a server with client side encryption. Databags can be used for settings, app configurations and arbitrary json data.
 
 ## Installation
 
@@ -9,23 +9,25 @@ Client library to fetch and manage data bags from a server. Databags can be used
 ## Usage
 
     require "lib/dbag";
-    client = Dbag::Client.new("http://YOUR_ENDPOINT", "YOUR AUTH TOKEN")
+    
+    # Setup: Initial use, this will create a config file and create an encryption secret key
+    Dbag::Client.setup(username, password)
+    
+    client = Dbag::Client.new("http://YOUR_ENDPOINT") # pass in the base url of your databags server
 
-    data_bag = client.find("YOUR DATA BAG KEY", "YOUR ENVIRONMENT")
+    data_bag = client.find("A DATABAG ID")
     data_bags = client.all
 
     client.to_file(data_bag, "/your/path/your_file.json")
     client.to_file(data_bag, "/your/path/your_file.yml", :yaml)
 
-    encrypted_on_server = false
-
     new_data_bag = {"foo" => "bar", "baz" => "foo"}
-    client.create("NEW DATA BAG KEY", "production", new_data_bag, encrypted_on_server)
+    client.create(["index key 1"], new_data_bag)
     new_data_bag["foo"] = "bar2"
-    client.update("NEW DATA BAG KEY", "production", new_data_bag, encrypted_on_server)
+    client.update(new_data_bag)
 
-    data_bag2 = client.from_file("NEW DATA BAG KEY 2", "production", "/your/path/the_file_to_store.json", encrypted_on_server)
-    data_bag3 = client.from_file("NEW DATA BAG KEY 3", "development", "/path/some.yml", encrypted_on_server, :yaml)
+    data_bag2 = client.from_file("NEW DATA BAG KEY 2", "/your/path/the_file_to_store.json")
+    data_bag3 = client.from_file("NEW DATA BAG KEY 3", "/path/some.yml", :yaml)
 
 ## Contributing to dbag
  
