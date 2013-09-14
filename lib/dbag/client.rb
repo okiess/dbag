@@ -2,6 +2,7 @@ module Dbag
   class Client
     include HTTParty
     attr_accessor :base_url, :auth_token, :auth_token_valid_until, :logger, :log_level
+    attr_accessor :username, :password
 
     def initialize(base_url)
       self.base_url = base_url
@@ -85,14 +86,19 @@ module Dbag
       end
     end
 
-    def self.setup
+    def self.setup(email, password)
       raise ".dbag file exists!" if File.exists?("#{ENV['HOME']}/.dbag")
       File.open("#{ENV['HOME']}/.dbag", "w") do |f|
         hash = {
+          :username => email,
           :salt => "#{Time.now.to_i}#{SecureRandom.hex(128)}",
           :secret_key => SecureRandom.hex(256),
           :iv => OpenSSL::Cipher::Cipher.new('aes-256-cbc').random_iv
         }
+        # TODO: should the password really be saved to a file even if it is encrypted?
+        encrypted_password = Encryptor.encrypt(password, :key => hash[:secret_key], :iv => hash[:iv],
+          :salt => hash[:salt])
+        hash[:password] = encrypted_password
         f.write(JSON.pretty_generate(hash))
       end
     end
@@ -116,6 +122,8 @@ module Dbag
             @salt = json['salt']
             @secret_key = json['secret_key']
             @iv = json['iv']
+            @username = json['username']
+            @password = Encryptor.decrypt(json['password'], :key => @secret_key, :iv => @iv, :salt => @salt)
           end
         end
       end
@@ -151,7 +159,8 @@ module Dbag
     end
     
     def get_auth_token
-      auth = {:username => "kiessler@inceedo.com", :password => "tester"}
+      init_encryptor unless self.username
+      auth = {:username => self.username, :password => self.password}
       endpoint_value = "#{self.base_url}/auth_tokens.json"
       body = {}
       options = { :body => {}, :basic_auth => auth }
