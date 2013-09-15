@@ -13,7 +13,7 @@ Client library to fetch and manage data bags from a server with client side encr
     # Setup: Initial use, this will create a config file and create an encryption secret key
     Dbag::Client.setup(username, password)
     
-    client = Dbag::Client.new("http://YOUR_ENDPOINT") # pass in the base url of your databags server
+    client = Dbag::Client.new # pass in the base url of your databags server if necessary
 
     data_bag = client.find("A DATABAG ID")
     data_bags = client.all

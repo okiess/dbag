@@ -4,7 +4,7 @@ module Dbag
     attr_accessor :base_url, :api_version, :auth_token, :auth_token_valid_until, :logger, :log_level
     attr_accessor :username, :password
 
-    def initialize(base_url)
+    def initialize(base_url = 'http://databags.io')
       self.api_version = 'v1'
       self.base_url = base_url
       self.logger = Logger.new(STDOUT)
