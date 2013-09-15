@@ -1,17 +1,21 @@
 module Dbag
   class Client
     include HTTParty
-    attr_accessor :base_url, :auth_token, :auth_token_valid_until, :logger, :log_level
+    attr_accessor :base_url, :api_version, :auth_token, :auth_token_valid_until, :logger, :log_level
     attr_accessor :username, :password
 
     def initialize(base_url)
+      self.api_version = 'v1'
       self.base_url = base_url
       self.logger = Logger.new(STDOUT)
       self.logger.level = (self.log_level || Logger::DEBUG)
     end
 
-    def all(decrypt = true)
-      response = get_response(:get, '/data_bags.json')
+    def all(page = 1, decrypt = true, options = {})
+      url_options = {}
+      url_options[:page] = page
+      url_options[:keys] = options[:keys] if options[:keys]
+      response = get_response(:get, "/api/#{self.api_version}/data_bags.json", url_options)
       if response and response.parsed_response and response.code == 200
         if decrypt
           decrypted = []
@@ -26,9 +30,21 @@ module Dbag
       end
       nil
     end
-    
+
+    def query(keys, page = 1, decrypt = true)
+      all(page, decrypt, { :keys => (keys.is_a?(String) ? [keys] : keys)})
+    end
+
+    def count
+      response = get_response(:get, "/api/#{self.api_version}/data_bags/count.json")
+      if response and response.parsed_response and response.code == 200
+        return response.parsed_response['count']
+      end
+      nil
+    end
+
     def dump(path = '/tmp', encrypted = true)
-      if (data_bags = all(false))
+      if (data_bags = all(nil, false))
         data_bags.each do |data_bag|
           File.open("#{path}/#{data_bag['id']}#{encrypted ? '' : '.json'}", "w") do |f|
             f.write(encrypted ? data_bag['json'] : JSON.pretty_generate(JSON.parse(decrypt(data_bag['json']))))
@@ -38,7 +54,7 @@ module Dbag
     end
 
     def find(data_bag_id)
-      if (response = get_response(:get, "/data_bags/#{data_bag_id}.json"))
+      if (response = get_response(:get, "/api/#{self.api_version}/data_bags/#{data_bag_id}.json"))
         if (data_bag = response.parsed_response)
           data_bag['json'] = JSON.parse(decrypt(data_bag['json']))
           return data_bag
@@ -47,21 +63,20 @@ module Dbag
       nil
     end
 
-    def create(keys, data_bag = {})
-      raise "Invalid Databag!" unless keys or data_bag
-      response = get_response(:post, '/data_bags.json', 
-        {:body => {:data_bag => {:keys => keys, :json => encrypt(data_bag.to_json)}}})
+    def create(keys = [], data_bag = {})
+      raise "Invalid Databag!" unless data_bag.keys.any?
+      response = get_response(:post, "/api/#{self.api_version}/data_bags.json", 
+        {:body => {:data_bag => {:keys => (keys.is_a?(String) ? [keys] : keys), :json => encrypt(data_bag.to_json)}}})
     end
 
     def update(data_bag)
       raise "Invalid Databag!" unless data_bag
       data_bag['json'] = encrypt(data_bag['json'].to_json)
       data_bag.delete('url')
-      response = get_response(:put, "/data_bags/#{data_bag['id']}.json", {:body => {:data_bag => data_bag}})
+      response = get_response(:put, "/api/#{self.api_version}/data_bags/#{data_bag['id']}.json", {:body => {:data_bag => data_bag}})
     end
 
     def to_file(hash, path, format = :json)
-      # TODO
       File.open(path, "w") do |f|
         if format == :json
           f.write(JSON.pretty_generate(hash))
@@ -71,16 +86,15 @@ module Dbag
       end
     end
 
-    def from_file(new_key, environment, path, encrypted = false, format = :json)
-      # TODO
+    def from_file(path, keys = [], format = :json)
       File.open(path, "r" ) do |f|
         if format == :json
           if (json = JSON.load(f))
-            create(new_key, environment, json, encrypted)
+            create(keys, json)
           end
         elsif format == :yaml
           if (yaml = YAML.load_file(path))
-            create(new_key, environment, yaml, encrypted)
+            create(keys, yaml)
           end
         end
       end
@@ -142,6 +156,8 @@ module Dbag
           logger.debug("Body: #{body.inspect}")
           response = HTTParty.send(http_verb, endpoint_value, body)
         else
+          endpoint_value = "#{endpoint_value}&page=#{options[:page]}" if options[:page]
+          endpoint_value = "#{endpoint_value}&keys=#{URI.escape(options[:keys].join(' '))}" if options[:keys]
           response = HTTParty.send(http_verb, endpoint_value) 
         end
         if response
@@ -161,7 +177,7 @@ module Dbag
     def get_auth_token
       init_encryptor unless self.username
       auth = {:username => self.username, :password => self.password}
-      endpoint_value = "#{self.base_url}/auth_tokens.json"
+      endpoint_value = "#{self.base_url}/api/#{self.api_version}/auth_tokens.json"
       body = {}
       options = { :body => {}, :basic_auth => auth }
       if (response = HTTParty.post(endpoint_value, options))
