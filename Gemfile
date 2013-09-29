@@ -1,6 +1,7 @@
 source "https://rubygems.org"
 gem "httparty"
 gem "encryptor", "~> 1.1.3"
+gem "sqlite3"
 
 group :development do
   gem "shoulda", ">= 0"

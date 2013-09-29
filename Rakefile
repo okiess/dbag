@@ -24,6 +24,7 @@ Jeweler::Tasks.new do |gem|
   gem.add_dependency "httparty", ">= 0.8.3"
   gem.add_dependency "multi_json", ">= 1.3.6"
   gem.add_dependency "encryptor", "1.1.3"
+  gem.add_dependency "sqlite3", "1.3.8"
 end
 Jeweler::RubygemsDotOrgTasks.new
 

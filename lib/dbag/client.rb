@@ -3,12 +3,14 @@ module Dbag
     include HTTParty
     attr_accessor :base_url, :api_version, :auth_token, :auth_token_valid_until, :logger, :log_level
     attr_accessor :username, :password
-
+    attr_accessor :db
+    
     def initialize(base_url = 'http://databags.io')
       self.api_version = 'v1'
       self.base_url = base_url
       self.logger = Logger.new(STDOUT)
       self.logger.level = (self.log_level || Logger::DEBUG)
+      self.db = SQLite3::Database.new("#{ENV['HOME']}/.dbag.db")
     end
 
     def all(page = 1, decrypt = true, options = {})
@@ -67,6 +69,16 @@ module Dbag
       raise "Invalid Databag!" unless data_bag.keys.any?
       response = get_response(:post, "/api/#{self.api_version}/data_bags.json", 
         {:body => {:data_bag => {:keys => (keys.is_a?(String) ? [keys] : keys), :json => encrypt(data_bag.to_json)}}})
+      if (data_bag = response.parsed_response)
+        if data_bag.id
+          db.execute("BEGIN TRANSACTION")
+          db.execute "INSERT INTO data_bags (data_bag_id) VALUES (?)", [data_bag['id']]
+          db.execute("COMMIT TRANSACTION")
+        else
+          raise "Data bag couldn't be created!"
+        end
+      end
+      data_bag
     end
 
     def update(data_bag)
@@ -100,7 +112,7 @@ module Dbag
       end
     end
 
-    def self.setup(email, password)
+    def self.setup(email, password, dbsetup = true)
       raise ".dbag file exists!" if File.exists?("#{ENV['HOME']}/.dbag")
       File.open("#{ENV['HOME']}/.dbag", "w") do |f|
         hash = {
@@ -114,6 +126,13 @@ module Dbag
           :salt => hash[:salt])
         hash[:password] = encrypted_password
         f.write(JSON.pretty_generate(hash))
+      end
+      if dbsetup and not File.exists?("#{ENV['HOME']}/.dbag.db")
+        db = SQLite3::Database.new("#{ENV['HOME']}/.dbag.db")
+        table = db.execute <<-SQL
+        CREATE TABLE data_bags (id INTEGER PRIMARY KEY AUTOINCREMENT, data_bag_id TEXT);
+        CREATE INDEX data_bag_id_idx ON data_bags (data_bag_id);
+        SQL
       end
     end
 
