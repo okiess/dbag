@@ -11,23 +11,6 @@ rescue Bundler::BundlerError => e
 end
 require 'rake'
 
-require 'jeweler'
-Jeweler::Tasks.new do |gem|
-  # gem is a Gem::Specification... see http://docs.rubygems.org/read/chapter/20 for more options
-  gem.name = "dbag"
-  gem.homepage = "http://github.com/okiess/dbag"
-  gem.license = "MIT"
-  gem.summary = "Client for a Data Bag server"
-  gem.description = "Client library to fetch and manage data bags from a server. Databags can be used for settings, app configurations and arbitrary json data."
-  gem.email = "kiessler@inceedo.com"
-  gem.authors = ["Oliver Kiessler"]
-  gem.add_dependency "httparty", ">= 0.8.3"
-  gem.add_dependency "multi_json", ">= 1.3.6"
-  gem.add_dependency "encryptor", "1.1.3"
-  gem.add_dependency "sqlite3", "1.3.8"
-end
-Jeweler::RubygemsDotOrgTasks.new
-
 require 'rake/testtask'
 Rake::TestTask.new(:test) do |test|
   test.libs << 'lib' << 'test'
@@ -35,18 +18,10 @@ Rake::TestTask.new(:test) do |test|
   test.verbose = true
 end
 
-require 'rcov/rcovtask'
-Rcov::RcovTask.new do |test|
-  test.libs << 'test'
-  test.pattern = 'test/**/test_*.rb'
-  test.verbose = true
-  test.rcov_opts << '--exclude "gems/*"'
-end
-
 task :default => :test
 
 require 'rdoc/task'
-Rake::RDocTask.new do |rdoc|
+RDoc::Task.new do |rdoc|
   version = File.exist?('VERSION') ? File.read('VERSION') : ""
 
   rdoc.rdoc_dir = 'rdoc'
